@@ -184,11 +184,10 @@ Redis URL [redis://localhost:6379]:
 
 ### Why Not A2A?
 
-The telegram-ai-bridge project includes an A2A bus for multi-bot auto-broadcast in Telegram group chats. agent-nexus intentionally skips A2A because:
+The telegram-ai-bridge project includes an A2A bus for multi-bot auto-broadcast in Telegram group chats. agent-nexus supports A2A but **defaults to off**:
 
-- **MCP already covers it.** RecallNest gives all agents shared memory, and cross-agent communication goes through MCP/CLI directly.
-- **A2A is group-chat-only.** Most users run 1:1 private chats with their bots. A2A adds complexity with no benefit for that use case.
-- **DMs don't need a bridge.** Bots talk to each other directly via terminal-level MCP, no Telegram middleman.
+- **Most users don't need it.** 1:1 private chats are the common case, and bots talk to each other directly via MCP/CLI.
+- **Group war rooms do.** Want multiple bots chiming in automatically in the same group? Set `a2aEnabled: true` in `bridge-config.json` to turn it on.
 
 ## What Gets Installed
 
