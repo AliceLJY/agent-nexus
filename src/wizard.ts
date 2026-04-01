@@ -3,24 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { detectEnvironment, printDetectResult } from "./detect.js";
 import { NEXUS_DIR, CONFIG_PATH, PIDS_DIR, LOGS_DIR } from "./paths.js";
 import { injectAllMcpConfigs } from "./configure.js";
-
-interface BackendConfig {
-  enabled: boolean;
-  botToken: string;
-}
-
-interface GeminiConfig extends BackendConfig {
-  oauthClientId: string;
-  oauthClientSecret: string;
-}
-
-interface NexusConfig {
-  telegram: { ownerId: number; httpProxy: string };
-  memory: { jinaApiKey: string };
-  agents: { claude: BackendConfig; codex: BackendConfig; gemini: GeminiConfig };
-  crossAgent: { ccToCodex: "plugin" | "mcp" | "both" };
-  groupChat: { enabled: boolean; sharedContextBackend: "sqlite" | "redis"; redisUrl: string };
-}
+import type { NexusConfig } from "./types.js";
 
 async function ask(rl: ReturnType<typeof createInterface>, prompt: string): Promise<string> {
   const answer = await rl.question(`  ${prompt}: `);

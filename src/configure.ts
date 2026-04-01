@@ -1,24 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { CLAUDE_JSON, CLAUDE_MD, CODEX_TOML, CODEX_AGENTS_MD, GEMINI_JSON, GEMINI_MD, NEXUS_DIR } from "./paths.js";
-
-interface BackendConfig {
-  enabled: boolean;
-  botToken: string;
-}
-
-interface GeminiConfig extends BackendConfig {
-  oauthClientId: string;
-  oauthClientSecret: string;
-}
-
-interface NexusConfig {
-  telegram: { ownerId: number; httpProxy: string };
-  memory: { jinaApiKey: string };
-  agents: { claude: BackendConfig; codex: BackendConfig; gemini: GeminiConfig };
-  crossAgent: { ccToCodex: "plugin" | "mcp" | "both" };
-  groupChat: { enabled: boolean; sharedContextBackend: "sqlite" | "redis"; redisUrl: string };
-}
+import type { NexusConfig } from "./types.js";
 
 function resolveRecallnestMcp(): string {
   const home = process.env.HOME || "";
