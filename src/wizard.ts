@@ -1,7 +1,8 @@
 import { createInterface } from "readline/promises";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { createDefaultConfig } from "telegram-ai-bridge/config.js";
 import { detectEnvironment, printDetectResult } from "./detect.js";
-import { NEXUS_DIR, CONFIG_PATH, PIDS_DIR, LOGS_DIR } from "./paths.js";
+import { NEXUS_DIR, CONFIG_PATH, BRIDGE_CONFIG_PATH, PIDS_DIR, LOGS_DIR } from "./paths.js";
 import { injectAllMcpConfigs } from "./configure.js";
 import type { NexusConfig } from "./types.js";
 
@@ -44,22 +45,18 @@ export async function runWizard(): Promise<void> {
   // 4. Per-backend bot tokens
   console.log("\n  🤖 Bot Tokens (each backend needs its own @BotFather token)\n");
 
-  const agents: NexusConfig["agents"] = {
-    claude: { enabled: false, botToken: "" },
-    codex: { enabled: false, botToken: "" },
-    gemini: { enabled: false, botToken: "", oauthClientId: "", oauthClientSecret: "" },
-  };
-
+  const backendTokens: Record<string, string> = {};
+  const geminiOAuth = { clientId: "", clientSecret: "" };
   const detected: [string, boolean][] = [["claude", env.claude], ["codex", env.codex], ["gemini", env.gemini]];
+
   for (const [name, found] of detected) {
     if (!found) { console.log(`  ⬚ ${name} not detected, skipping`); continue; }
     const token = await ask(rl, `${name} Bot Token (Enter to skip)`);
     if (!token) { console.log(`  ⏭️  ${name} skipped`); continue; }
-    (agents as any)[name].enabled = true;
-    (agents as any)[name].botToken = token;
+    backendTokens[name] = token;
     if (name === "gemini") {
-      agents.gemini.oauthClientId = await ask(rl, "Gemini OAuth Client ID");
-      agents.gemini.oauthClientSecret = await ask(rl, "Gemini OAuth Client Secret");
+      geminiOAuth.clientId = await ask(rl, "Gemini OAuth Client ID");
+      geminiOAuth.clientSecret = await ask(rl, "Gemini OAuth Client Secret");
     }
   }
 
@@ -76,48 +73,65 @@ export async function runWizard(): Promise<void> {
   }
 
   // 6. Group chat (multi-bot in same Telegram group)
-  const enabledCount = Object.values(agents).filter(a => a.enabled).length;
-  let groupChat: NexusConfig["groupChat"] = { enabled: false, sharedContextBackend: "sqlite", redisUrl: "" };
+  const enabledCount = Object.keys(backendTokens).length;
+  let groupBackend: "sqlite" | "redis" = "sqlite";
+  let redisUrl = "";
+  let groupEnabled = false;
+
   if (enabledCount >= 2) {
     console.log("\n  👥 Group Chat\n");
     const wantGroup = (await ask(rl, "Put multiple bots in the same Telegram group? [y/N]") || "n").toLowerCase();
     if (wantGroup === "y" || wantGroup === "yes") {
+      groupEnabled = true;
       console.log("  Shared context backend:");
       console.log("    1. SQLite (local, single machine)");
       console.log("    2. Redis (recommended for multi-bot groups)");
       const backendChoice = await ask(rl, "Choose [2]") || "2";
-      const backend = backendChoice === "1" ? "sqlite" as const : "redis" as const;
-      let redisUrl = "";
-      if (backend === "redis") {
+      groupBackend = backendChoice === "1" ? "sqlite" : "redis";
+      if (groupBackend === "redis") {
         redisUrl = await ask(rl, "Redis URL [redis://localhost:6379]") || "redis://localhost:6379";
       }
-      groupChat = { enabled: true, sharedContextBackend: backend, redisUrl };
     }
   }
 
   rl.close();
 
-  const anyEnabled = Object.values(agents).some(a => a.enabled);
-  if (!anyEnabled) { console.log("  ❌ At least one backend needs a bot token."); process.exit(1); }
+  if (!enabledCount) { console.log("  ❌ At least one backend needs a bot token."); process.exit(1); }
 
-  // 7. Build config
-  const config: NexusConfig = {
-    telegram: { ownerId, httpProxy: httpProxy || "" },
-    memory: { jinaApiKey },
-    agents,
-    crossAgent: { ccToCodex },
-    groupChat,
-  };
+  // 7. Build bridge config from bridge's own API (single source of truth)
+  const bridgeConfig = createDefaultConfig();
 
-  // 8. Write dirs + config
+  bridgeConfig.shared.ownerTelegramId = String(ownerId);
+  bridgeConfig.shared.cwd = process.env.HOME || "/tmp";
+  bridgeConfig.shared.httpProxy = httpProxy || "";
+  bridgeConfig.shared.tasksDb = "tasks.db";
+  bridgeConfig.shared.enableGroupSharedContext = groupEnabled;
+  bridgeConfig.shared.sharedContextBackend = groupEnabled ? groupBackend : "sqlite";
+  bridgeConfig.shared.redisUrl = redisUrl;
+
+  for (const name of ["claude", "codex", "gemini"] as const) {
+    const bc = bridgeConfig.backends[name];
+    bc.enabled = name in backendTokens;
+    bc.telegramBotToken = backendTokens[name] || "";
+    if (name === "gemini" && bc.enabled) {
+      (bc as any).oauthClientId = geminiOAuth.clientId;
+      (bc as any).oauthClientSecret = geminiOAuth.clientSecret;
+    }
+  }
+
+  // 8. Write configs
   mkdirSync(NEXUS_DIR, { recursive: true });
   mkdirSync(PIDS_DIR, { recursive: true });
   mkdirSync(LOGS_DIR, { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
-  console.log(`\n  ✅ Config written to ${CONFIG_PATH}`);
+
+  const nexusConfig: NexusConfig = { jinaApiKey, crossAgent: { ccToCodex } };
+  writeFileSync(CONFIG_PATH, JSON.stringify(nexusConfig, null, 2) + "\n", { mode: 0o600 });
+  writeFileSync(BRIDGE_CONFIG_PATH, JSON.stringify(bridgeConfig, null, 2) + "\n", { mode: 0o600 });
+  console.log(`\n  ✅ Config written to ${NEXUS_DIR}/`);
 
   // 9. Inject MCP configs
-  injectAllMcpConfigs(config);
+  const enabledBackends = Object.keys(backendTokens);
+  injectAllMcpConfigs(jinaApiKey, enabledBackends);
 
   // 10. Cross-agent setup hints
   if (ccToCodex === "plugin" || ccToCodex === "both") {

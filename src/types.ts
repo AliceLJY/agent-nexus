@@ -1,17 +1,5 @@
-export interface BackendConfig {
-  enabled: boolean;
-  botToken: string;
-}
-
-export interface GeminiConfig extends BackendConfig {
-  oauthClientId: string;
-  oauthClientSecret: string;
-}
-
+/** Nexus-only settings (not bridge config — bridge config uses bridge's own API) */
 export interface NexusConfig {
-  telegram: { ownerId: number; httpProxy: string };
-  memory: { jinaApiKey: string };
-  agents: { claude: BackendConfig; codex: BackendConfig; gemini: GeminiConfig };
+  jinaApiKey: string;
   crossAgent: { ccToCodex: "plugin" | "mcp" | "both" };
-  groupChat: { enabled: boolean; sharedContextBackend: "sqlite" | "redis"; redisUrl: string };
 }

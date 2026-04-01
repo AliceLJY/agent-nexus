@@ -1,16 +1,16 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "fs";
 import { join } from "path";
-import { CONFIG_PATH, PIDS_DIR, LOGS_DIR, NEXUS_DIR } from "./paths.js";
+import { CONFIG_PATH, BRIDGE_CONFIG_PATH, PIDS_DIR, LOGS_DIR, NEXUS_DIR } from "./paths.js";
 
-function readConfig() {
-  if (!existsSync(CONFIG_PATH)) {
-    console.log("  ❌ No config found. Run: agent-nexus init");
+function readJson(path: string, label: string): any {
+  if (!existsSync(path)) {
+    console.log(`  ❌ ${label} not found. Run: agent-nexus init`);
     process.exit(1);
   }
   try {
-    return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+    return JSON.parse(readFileSync(path, "utf-8"));
   } catch (e) {
-    console.log(`  ❌ Config file is malformed: ${CONFIG_PATH}`);
+    console.log(`  ❌ ${label} is malformed: ${path}`);
     console.log(`     ${(e as Error).message}`);
     process.exit(1);
   }
@@ -45,8 +45,17 @@ function findModule(name: string): string {
   throw new Error(`Cannot find ${name}. Run: bun install`);
 }
 
+function getEnabledBackends(bridgeConfig: any): string[] {
+  const backends: string[] = [];
+  for (const name of ["claude", "codex", "gemini"]) {
+    if (bridgeConfig?.backends?.[name]?.enabled) backends.push(name);
+  }
+  return backends;
+}
+
 export async function start(): Promise<void> {
-  const config = readConfig();
+  const nexusConfig = readJson(CONFIG_PATH, "Nexus config");
+  const bridgeConfig = readJson(BRIDGE_CONFIG_PATH, "Bridge config");
   mkdirSync(LOGS_DIR, { recursive: true });
 
   console.log("\n🚀 Starting agent-nexus services...\n");
@@ -61,7 +70,7 @@ export async function start(): Promise<void> {
     const writer = logFile.writer();
 
     const proc = Bun.spawn(["bun", "run", apiEntry], {
-      env: { ...process.env, JINA_API_KEY: config.memory.jinaApiKey },
+      env: { ...process.env, JINA_API_KEY: nexusConfig.jinaApiKey },
       stdout: writer,
       stderr: writer,
     });
@@ -72,12 +81,7 @@ export async function start(): Promise<void> {
   // 2. Start telegram-ai-bridge (one process per enabled backend)
   const bridgeDir = findModule("telegram-ai-bridge");
   const bridgeEntry = join(bridgeDir, "start.js");
-  const bridgeConfig = join(NEXUS_DIR, "bridge-config.json");
-
-  const enabledBackends: string[] = [];
-  if (config.agents?.claude?.enabled) enabledBackends.push("claude");
-  if (config.agents?.codex?.enabled) enabledBackends.push("codex");
-  if (config.agents?.gemini?.enabled) enabledBackends.push("gemini");
+  const enabledBackends = getEnabledBackends(bridgeConfig);
 
   for (const backend of enabledBackends) {
     const pidName = `bridge-${backend}`;
@@ -89,7 +93,7 @@ export async function start(): Promise<void> {
     const writer = logFile.writer();
 
     const proc = Bun.spawn(["bun", bridgeEntry, "start", "--backend", backend], {
-      env: { ...process.env, BRIDGE_CONFIG_PATH: bridgeConfig },
+      env: { ...process.env, BRIDGE_CONFIG_PATH },
       cwd: bridgeDir,
       stdout: writer,
       stderr: writer,
@@ -107,14 +111,12 @@ export async function start(): Promise<void> {
 export async function stop(): Promise<void> {
   console.log("\n🛑 Stopping agent-nexus services...\n");
 
-  // Collect all services: recallnest + all bridge-* PIDs
   const services = ["recallnest"];
   for (const backend of ["claude", "codex", "gemini"]) {
     if (existsSync(join(PIDS_DIR, `bridge-${backend}.pid`))) {
       services.push(`bridge-${backend}`);
     }
   }
-  // Legacy single bridge PID (from older versions)
   if (existsSync(join(PIDS_DIR, "bridge.pid"))) {
     services.push("bridge");
   }

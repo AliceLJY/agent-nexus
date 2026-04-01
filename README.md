@@ -210,19 +210,25 @@ The telegram-ai-bridge project includes an Agent-to-Agent (A2A) bus for multi-bo
 
 ## Config
 
-All configuration lives in one place: `~/.agent-nexus/config.json`
+Configuration lives in `~/.agent-nexus/`:
 
+**config.json** -- nexus-only settings:
 ```jsonc
 {
-  "telegram": { "ownerId": 123456, "httpProxy": "" },
-  "memory": { "jinaApiKey": "..." },
-  "agents": {
-    "claude": { "enabled": true, "botToken": "111:AAA..." },
-    "codex": { "enabled": true, "botToken": "222:BBB..." },
-    "gemini": { "enabled": false, "botToken": "" }
-  },
-  "crossAgent": { "ccToCodex": "both" },
-  "groupChat": { "enabled": true, "sharedContextBackend": "redis", "redisUrl": "redis://localhost:6379" }
+  "jinaApiKey": "jina_...",
+  "crossAgent": { "ccToCodex": "both" }
+}
+```
+
+**bridge-config.json** -- auto-generated from [telegram-ai-bridge](https://github.com/AliceLJY/telegram-ai-bridge)'s config API, no manual sync needed:
+```jsonc
+{
+  "shared": { "ownerTelegramId": "123456", "sharedContextBackend": "redis", ... },
+  "backends": {
+    "claude": { "enabled": true, "telegramBotToken": "111:AAA..." },
+    "codex": { "enabled": true, "telegramBotToken": "222:BBB..." },
+    "gemini": { "enabled": false }
+  }
 }
 ```
 

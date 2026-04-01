@@ -3,6 +3,7 @@ import { join } from "path";
 
 export const NEXUS_DIR = join(homedir(), ".agent-nexus");
 export const CONFIG_PATH = join(NEXUS_DIR, "config.json");
+export const BRIDGE_CONFIG_PATH = join(NEXUS_DIR, "bridge-config.json");
 export const PIDS_DIR = join(NEXUS_DIR, "pids");
 export const LOGS_DIR = join(NEXUS_DIR, "logs");
 
