@@ -74,7 +74,7 @@ export async function start(): Promise<void> {
     const writer = logFile.writer();
 
     const proc = Bun.spawn(["bun", bridgeEntry, "start"], {
-      env: { ...process.env, BRIDGE_CONFIG: bridgeConfig },
+      env: { ...process.env, BRIDGE_CONFIG_PATH: bridgeConfig },
       cwd: bridgeDir,
       stdout: writer,
       stderr: writer,

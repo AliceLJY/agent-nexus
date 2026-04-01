@@ -2,10 +2,22 @@ import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from
 import { dirname, join } from "path";
 import { CLAUDE_JSON, CLAUDE_MD, CODEX_TOML, CODEX_AGENTS_MD, GEMINI_JSON, GEMINI_MD, NEXUS_DIR } from "./paths.js";
 
+interface BackendConfig {
+  enabled: boolean;
+  botToken: string;
+}
+
+interface GeminiConfig extends BackendConfig {
+  oauthClientId: string;
+  oauthClientSecret: string;
+}
+
 interface NexusConfig {
-  telegram: { botToken: string; ownerId: number };
+  telegram: { ownerId: number; httpProxy: string };
   memory: { jinaApiKey: string; dbPath: string };
-  agents: { claude: boolean; codex: boolean; gemini: boolean };
+  agents: { claude: BackendConfig; codex: BackendConfig; gemini: GeminiConfig };
+  crossAgent: { ccToCodex: "plugin" | "mcp" | "both" };
+  groupChat: { enabled: boolean; sharedContextBackend: "sqlite" | "redis"; redisUrl: string };
 }
 
 function resolveRecallnestMcp(): string {
@@ -137,7 +149,7 @@ function injectManagedBlock(targetPath: string, snippetPath: string, markerName:
 function injectContinuityRules(config: NexusConfig): void {
   console.log("\n  📝 Injecting RecallNest continuity rules...\n");
 
-  if (config.agents.claude) {
+  if (config.agents.claude.enabled) {
     const snippet = resolveSnippet("claude-code");
     if (snippet) {
       backup(CLAUDE_MD);
@@ -148,7 +160,7 @@ function injectContinuityRules(config: NexusConfig): void {
     }
   }
 
-  if (config.agents.codex) {
+  if (config.agents.codex.enabled) {
     const snippet = resolveSnippet("codex");
     if (snippet) {
       backup(CODEX_AGENTS_MD);
@@ -159,7 +171,7 @@ function injectContinuityRules(config: NexusConfig): void {
     }
   }
 
-  if (config.agents.gemini) {
+  if (config.agents.gemini.enabled) {
     const snippet = resolveSnippet("gemini-cli");
     if (snippet) {
       backup(GEMINI_MD);
@@ -176,30 +188,43 @@ function generateBridgeConfig(config: NexusConfig): void {
     shared: {
       ownerTelegramId: String(config.telegram.ownerId),
       cwd: process.env.HOME || "/tmp",
+      httpProxy: config.telegram.httpProxy || "",
       defaultVerboseLevel: 1,
       executor: "direct",
-      enableGroupSharedContext: true,
-      sharedContextBackend: "sqlite",
+      tasksDb: "tasks.db",
+      enableGroupSharedContext: config.groupChat.enabled,
+      groupContextMaxMessages: 30,
+      groupContextMaxTokens: 3000,
+      groupContextTtlMs: 1200000,
+      sharedContextBackend: config.groupChat.enabled ? config.groupChat.sharedContextBackend : "sqlite",
+      sharedContextDb: "shared-context.db",
+      sharedContextJsonPath: "shared-context.json",
+      redisUrl: config.groupChat.redisUrl || "",
+      triggerDedupTtlMs: 300000,
+      sessionTimeoutMs: 900000,
     },
     backends: {
       claude: {
-        enabled: config.agents.claude,
-        telegramBotToken: config.agents.claude ? config.telegram.botToken : "",
+        enabled: config.agents.claude.enabled,
+        telegramBotToken: config.agents.claude.botToken || "",
         sessionsDb: "sessions.db",
         model: "claude-sonnet-4-6",
         permissionMode: "default",
       },
       codex: {
-        enabled: config.agents.codex,
-        telegramBotToken: config.agents.codex ? config.telegram.botToken : "",
+        enabled: config.agents.codex.enabled,
+        telegramBotToken: config.agents.codex.botToken || "",
         sessionsDb: "sessions-codex.db",
         model: "",
       },
       gemini: {
-        enabled: config.agents.gemini,
-        telegramBotToken: config.agents.gemini ? config.telegram.botToken : "",
+        enabled: config.agents.gemini.enabled,
+        telegramBotToken: config.agents.gemini.botToken || "",
         sessionsDb: "sessions-gemini.db",
         model: "gemini-2.5-pro",
+        oauthClientId: config.agents.gemini.oauthClientId || "",
+        oauthClientSecret: config.agents.gemini.oauthClientSecret || "",
+        googleCloudProject: "",
       },
     },
   };
@@ -211,9 +236,9 @@ function generateBridgeConfig(config: NexusConfig): void {
 export function injectAllMcpConfigs(config: NexusConfig): void {
   console.log("\n  🔌 Configuring MCP...\n");
   const mcpEntry = resolveRecallnestMcp();
-  if (config.agents.claude) injectClaude(mcpEntry, config.memory.jinaApiKey);
-  if (config.agents.codex) injectCodex(mcpEntry, config.memory.jinaApiKey);
-  if (config.agents.gemini) injectGemini(mcpEntry, config.memory.jinaApiKey);
+  if (config.agents.claude.enabled) injectClaude(mcpEntry, config.memory.jinaApiKey);
+  if (config.agents.codex.enabled) injectCodex(mcpEntry, config.memory.jinaApiKey);
+  if (config.agents.gemini.enabled) injectGemini(mcpEntry, config.memory.jinaApiKey);
   generateBridgeConfig(config);
   injectContinuityRules(config);
 }

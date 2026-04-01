@@ -45,9 +45,18 @@ $ agent-nexus init
 
   📝 Credentials
 
-  Telegram Bot Token: ********
   Your Telegram User ID: 123456
   Jina API Key: jina_****
+  HTTPS Proxy: (skipped)
+
+  🤖 Bot Tokens (each backend needs its own @BotFather token)
+
+  claude Bot Token: 111:AAA****
+  codex Bot Token: 222:BBB****
+
+  🔗 CC ↔ Codex Communication
+
+  Choose [3]: 3  (Both)
 
   🔌 Configuring MCP...
 
@@ -55,6 +64,12 @@ $ agent-nexus init
   ✅ Claude Code MCP configured
   ✅ Codex MCP configured
   ✅ Bridge config generated
+
+  🔗 CC → Codex: Install the official plugin in Claude Code:
+     claude /install-plugin codex@openai-codex
+
+  🔗 CC → Codex via RecallNest: ✅ Already configured
+  🔗 Codex → CC: claude -p "your prompt" (no extra config needed)
 
   ✅ agent-nexus setup complete!
   Run: agent-nexus start
@@ -113,6 +128,68 @@ agent-nexus status    # Health check with memory stats
 
 **agent-nexus doesn't replace anything.** It's the glue that makes your existing tools work as a team.
 
+## Cross-Agent Communication
+
+Beyond shared memory, your agents can call each other directly.
+
+### Claude Code → Codex
+
+During `agent-nexus init`, choose one or both:
+
+| Method | How It Works | Best For |
+|--------|-------------|----------|
+| **Official Plugin** | `codex@openai-codex` plugin for Claude Code | Direct task delegation, rescue debugging |
+| **Shared MCP** | Both agents read/write RecallNest | Context sharing, async handoffs |
+
+**Official Plugin** -- Claude Code can spawn Codex as a subagent for parallel tasks, second opinions, or rescue debugging:
+```
+claude /install-plugin codex@openai-codex
+```
+
+**Shared MCP** -- RecallNest is auto-configured as an MCP server for both tools. Claude Code writes context, Codex reads it (and vice versa). No extra setup needed.
+
+### Codex → Claude Code
+
+Codex can call Claude Code directly via CLI -- no plugin or MCP required:
+
+```bash
+claude -p "analyze this function for security issues"
+```
+
+> If you hit TTY issues in non-interactive environments: `script -q /dev/null claude -p "prompt"`
+
+### Group Chat (Multi-Bot in One Telegram Group)
+
+Put your CC bot and Codex bot in the same Telegram group and they'll share context automatically. During `agent-nexus init`, if 2+ backends are enabled, you'll be asked:
+
+```
+👥 Group Chat
+
+Put multiple bots in the same Telegram group? [y/N]: y
+
+Shared context backend:
+  1. SQLite (local, single machine)
+  2. Redis (recommended for multi-bot groups)
+  Choose [2]: 2
+
+Redis URL [redis://localhost:6379]:
+```
+
+**Why Redis?** Each bot runs as a separate process. SQLite works for single-machine setups, but Redis gives you:
+- Real-time cross-process context sharing (no file locks)
+- TTL-based auto-cleanup (no stale messages piling up)
+- Ready for multi-machine deployment if you scale later
+
+> Telegram bots can't see each other's messages natively. The shared context layer works around this by syncing messages through the backend store.
+
+### Why Not A2A?
+
+The telegram-ai-bridge project includes an Agent-to-Agent (A2A) bus for multi-bot Telegram group chats. agent-nexus intentionally skips A2A because:
+
+- **MCP already covers it.** RecallNest gives all agents shared memory -- no message bus needed.
+- **Codex has native HTTP.** Need Codex to do something? Call it via plugin or MCP, not Telegram relay.
+- **A2A is group-chat-only.** Most users run 1:1 private chats with their bots. A2A adds complexity with no benefit for that use case.
+
 ## What Gets Installed
 
 | Component | What It Does | Already Have It? |
@@ -137,11 +214,19 @@ All configuration lives in one place: `~/.agent-nexus/config.json`
 
 ```jsonc
 {
-  "telegram": { "botToken": "...", "ownerId": 123456 },
+  "telegram": { "ownerId": 123456, "httpProxy": "" },
   "memory": { "jinaApiKey": "...", "dbPath": "~/.recallnest/data/lancedb" },
-  "agents": { "claude": true, "codex": true, "gemini": false }
+  "agents": {
+    "claude": { "enabled": true, "botToken": "111:AAA..." },
+    "codex": { "enabled": true, "botToken": "222:BBB..." },
+    "gemini": { "enabled": false, "botToken": "" }
+  },
+  "crossAgent": { "ccToCodex": "both" },
+  "groupChat": { "enabled": true, "sharedContextBackend": "redis", "redisUrl": "redis://localhost:6379" }
 }
 ```
+
+> Each backend needs its own bot token from [@BotFather](https://t.me/BotFather).
 
 ## Ecosystem
 

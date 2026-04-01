@@ -4,10 +4,22 @@ import { detectEnvironment, printDetectResult } from "./detect.js";
 import { NEXUS_DIR, CONFIG_PATH, PIDS_DIR, LOGS_DIR } from "./paths.js";
 import { injectAllMcpConfigs } from "./configure.js";
 
+interface BackendConfig {
+  enabled: boolean;
+  botToken: string;
+}
+
+interface GeminiConfig extends BackendConfig {
+  oauthClientId: string;
+  oauthClientSecret: string;
+}
+
 interface NexusConfig {
-  telegram: { botToken: string; ownerId: number };
+  telegram: { ownerId: number; httpProxy: string };
   memory: { jinaApiKey: string; dbPath: string };
-  agents: { claude: boolean; codex: boolean; gemini: boolean };
+  agents: { claude: BackendConfig; codex: BackendConfig; gemini: GeminiConfig };
+  crossAgent: { ccToCodex: "plugin" | "mcp" | "both" };
+  groupChat: { enabled: boolean; sharedContextBackend: "sqlite" | "redis"; redisUrl: string };
 }
 
 async function ask(rl: ReturnType<typeof createInterface>, prompt: string): Promise<string> {
@@ -26,8 +38,6 @@ export async function runWizard(): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
   console.log("\n  📝 Credentials\n");
-  const botToken = await ask(rl, "Telegram Bot Token");
-  if (!botToken) { console.log("  ❌ Bot token is required."); process.exit(1); }
 
   const ownerIdStr = await ask(rl, "Your Telegram User ID");
   const ownerId = parseInt(ownerIdStr, 10);
@@ -36,17 +46,74 @@ export async function runWizard(): Promise<void> {
   const jinaApiKey = await ask(rl, "Jina API Key (for RecallNest embeddings)");
   if (!jinaApiKey) { console.log("  ❌ Jina API key is required."); process.exit(1); }
 
+  const httpProxy = await ask(rl, "HTTPS Proxy (optional, Enter to skip)");
+
+  // 3. Per-backend bot tokens
+  console.log("\n  🤖 Bot Tokens (each backend needs its own @BotFather token)\n");
+
+  const agents: NexusConfig["agents"] = {
+    claude: { enabled: false, botToken: "" },
+    codex: { enabled: false, botToken: "" },
+    gemini: { enabled: false, botToken: "", oauthClientId: "", oauthClientSecret: "" },
+  };
+
+  const detected: [string, boolean][] = [["claude", env.claude], ["codex", env.codex], ["gemini", env.gemini]];
+  for (const [name, found] of detected) {
+    if (!found) { console.log(`  ⬚ ${name} not detected, skipping`); continue; }
+    const token = await ask(rl, `${name} Bot Token (Enter to skip)`);
+    if (!token) { console.log(`  ⏭️  ${name} skipped`); continue; }
+    (agents as any)[name].enabled = true;
+    (agents as any)[name].botToken = token;
+    if (name === "gemini") {
+      agents.gemini.oauthClientId = await ask(rl, "Gemini OAuth Client ID");
+      agents.gemini.oauthClientSecret = await ask(rl, "Gemini OAuth Client Secret");
+    }
+  }
+
+  // 4. CC ↔ Codex communication
+  let ccToCodex: NexusConfig["crossAgent"]["ccToCodex"] = "mcp";
+  if (env.claude && env.codex) {
+    console.log("\n  🔗 CC ↔ Codex Communication\n");
+    console.log("  How should Claude Code call Codex?");
+    console.log("    1. Official Codex Plugin (codex@openai-codex)");
+    console.log("    2. Shared RecallNest MCP (already configured)");
+    console.log("    3. Both (recommended)");
+    const choice = await ask(rl, "Choose [3]") || "3";
+    ccToCodex = choice === "1" ? "plugin" : choice === "2" ? "mcp" : "both";
+  }
+
+  // 5. Group chat (multi-bot in same Telegram group)
+  const enabledCount = Object.values(agents).filter(a => a.enabled).length;
+  let groupChat: NexusConfig["groupChat"] = { enabled: false, sharedContextBackend: "sqlite", redisUrl: "" };
+  if (enabledCount >= 2) {
+    console.log("\n  👥 Group Chat\n");
+    const wantGroup = (await ask(rl, "Put multiple bots in the same Telegram group? [y/N]") || "n").toLowerCase();
+    if (wantGroup === "y" || wantGroup === "yes") {
+      console.log("  Shared context backend:");
+      console.log("    1. SQLite (local, single machine)");
+      console.log("    2. Redis (recommended for multi-bot groups)");
+      const backendChoice = await ask(rl, "Choose [2]") || "2";
+      const backend = backendChoice === "1" ? "sqlite" as const : "redis" as const;
+      let redisUrl = "";
+      if (backend === "redis") {
+        redisUrl = await ask(rl, "Redis URL [redis://localhost:6379]") || "redis://localhost:6379";
+      }
+      groupChat = { enabled: true, sharedContextBackend: backend, redisUrl };
+    }
+  }
+
   rl.close();
 
-  // 3. Build config
+  const anyEnabled = Object.values(agents).some(a => a.enabled);
+  if (!anyEnabled) { console.log("  ❌ At least one backend needs a bot token."); process.exit(1); }
+
+  // 6. Build config
   const config: NexusConfig = {
-    telegram: { botToken, ownerId },
+    telegram: { ownerId, httpProxy: httpProxy || "" },
     memory: { jinaApiKey, dbPath: "~/.recallnest/data/lancedb" },
-    agents: {
-      claude: env.claude,
-      codex: env.codex,
-      gemini: env.gemini,
-    },
+    agents,
+    crossAgent: { ccToCodex },
+    groupChat,
   };
 
   // 4. Write dirs + config
@@ -59,9 +126,22 @@ export async function runWizard(): Promise<void> {
   // 5. Inject MCP configs
   injectAllMcpConfigs(config);
 
-  // 6. Done
-  console.log(`
-  ✅ agent-nexus setup complete!
+  // 7. Cross-agent setup hints
+  if (ccToCodex === "plugin" || ccToCodex === "both") {
+    console.log("  🔗 CC → Codex: Install the official plugin in Claude Code:");
+    console.log("     claude /install-plugin codex@openai-codex\n");
+  }
+  if (ccToCodex === "mcp" || ccToCodex === "both") {
+    console.log("  🔗 CC → Codex via RecallNest: ✅ Already configured above\n");
+  }
+  if (env.claude && env.codex) {
+    console.log("  🔗 Codex → CC: Codex can call Claude Code directly:");
+    console.log('     claude -p "your prompt"');
+    console.log("     (no extra config needed)\n");
+  }
+
+  // 8. Done
+  console.log(`  ✅ agent-nexus setup complete!
 
   Run: agent-nexus start
   `);

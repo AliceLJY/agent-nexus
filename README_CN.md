@@ -45,9 +45,18 @@ $ agent-nexus init
 
   📝 填写凭证
 
-  Telegram Bot Token: ********
   你的 Telegram ID: 123456
   Jina API Key: jina_****
+  HTTPS Proxy:（跳过）
+
+  🤖 Bot Tokens（每个 backend 需要独立的 @BotFather token）
+
+  claude Bot Token: 111:AAA****
+  codex Bot Token: 222:BBB****
+
+  🔗 CC ↔ Codex 通信方式
+
+  选择 [3]: 3（都要）
 
   🔌 配置 MCP...
 
@@ -55,6 +64,12 @@ $ agent-nexus init
   ✅ Claude Code MCP 已配置
   ✅ Codex MCP 已配置
   ✅ Bridge 配置已生成
+
+  🔗 CC → Codex: 在 Claude Code 中安装官方插件：
+     claude /install-plugin codex@openai-codex
+
+  🔗 CC → Codex via RecallNest: ✅ 已配置
+  🔗 Codex → CC: claude -p "你的指令"（无需额外配置）
 
   ✅ 搞定！运行 agent-nexus start 启动服务
 ```
@@ -112,17 +127,87 @@ agent-nexus status    # 健康检查 + 记忆统计
 
 **agent-nexus 不替代任何东西。** 它是让你现有工具协同作战的粘合剂。
 
+## 跨 Agent 通信
+
+除了共享记忆，你的 agent 还能直接互相调用。
+
+### Claude Code → Codex
+
+`agent-nexus init` 时可选其一或两个都要：
+
+| 方式 | 原理 | 适用场景 |
+|------|------|---------|
+| **官方插件** | 在 Claude Code 中安装 `codex@openai-codex` 插件 | 直接派活、救火式调试 |
+| **共享 MCP** | 两个 agent 共读共写 RecallNest 记忆 | 上下文共享、异步交接 |
+
+**官方插件** -- Claude Code 可以把 Codex 当子 agent 使唤，并行干活、二次验证、救场：
+```
+claude /install-plugin codex@openai-codex
+```
+
+**共享 MCP** -- RecallNest 自动注入两个工具的 MCP 配置。Claude Code 写上下文，Codex 读；反过来也行。开箱即用。
+
+### Codex → Claude Code
+
+Codex 可以直接通过 CLI 调用 Claude Code，不需要额外配置：
+
+```bash
+claude -p "帮我分析这个函数的安全问题"
+```
+
+> TTY 环境报错时：`script -q /dev/null claude -p "prompt"`
+
+### 群聊模式（多 Bot 同群）
+
+把 CC bot 和 Codex bot 拉进同一个 Telegram 群，它们会自动共享上下文。`agent-nexus init` 时如果启用了 2 个以上 backend，会问你：
+
+```
+👥 Group Chat
+
+把多个 bot 放进同一个 Telegram 群？ [y/N]: y
+
+共享上下文后端：
+  1. SQLite（本地，单机）
+  2. Redis（推荐，多 bot 群聊）
+  选择 [2]: 2
+
+Redis URL [redis://localhost:6379]:
+```
+
+**为什么推荐 Redis？** 每个 bot 跑在独立进程里。SQLite 单机能用，但 Redis 优势在于：
+- 跨进程实时共享上下文（无文件锁竞争）
+- TTL 自动清理过期消息（不堆垃圾）
+- 以后要多机部署也直接能用
+
+> Telegram bot 天生看不到其他 bot 的消息。共享上下文层通过后端存储同步消息，绕过这个限制。
+
+### 为什么不用 A2A？
+
+telegram-ai-bridge 有个 A2A 总线，用于 Telegram 群聊里多 bot 互传消息。agent-nexus 故意不接 A2A，因为：
+
+- **MCP 已经够用。** RecallNest 给了所有 agent 共享记忆，不需要消息总线。
+- **Codex 原生支持 HTTP。** 叫 Codex 干活？走插件或 MCP，不用绕 Telegram 转发。
+- **A2A 只在群聊有意义。** 大部分用户都是跟 bot 一对一私聊，A2A 白加复杂度。
+
 ## 配置
 
 所有配置集中在 `~/.agent-nexus/config.json`：
 
 ```jsonc
 {
-  "telegram": { "botToken": "...", "ownerId": 123456 },
+  "telegram": { "ownerId": 123456, "httpProxy": "" },
   "memory": { "jinaApiKey": "...", "dbPath": "~/.recallnest/data/lancedb" },
-  "agents": { "claude": true, "codex": true, "gemini": false }
+  "agents": {
+    "claude": { "enabled": true, "botToken": "111:AAA..." },
+    "codex": { "enabled": true, "botToken": "222:BBB..." },
+    "gemini": { "enabled": false, "botToken": "" }
+  },
+  "crossAgent": { "ccToCodex": "both" },
+  "groupChat": { "enabled": true, "sharedContextBackend": "redis", "redisUrl": "redis://localhost:6379" }
 }
 ```
+
+> 每个 backend 需要独立的 bot token（从 [@BotFather](https://t.me/BotFather) 创建）。
 
 ## 生态
 
