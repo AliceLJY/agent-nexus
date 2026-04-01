@@ -183,11 +183,11 @@ Redis URL [redis://localhost:6379]:
 
 ### 为什么不用 A2A？
 
-telegram-ai-bridge 有个 A2A 总线，用于 Telegram 群聊里多 bot 互传消息。agent-nexus 故意不接 A2A，因为：
+telegram-ai-bridge 的 A2A 总线用于 Telegram 群聊里多 bot 自动接话（广播模式）。agent-nexus 故意不接 A2A，因为：
 
-- **MCP 已经够用。** RecallNest 给了所有 agent 共享记忆，不需要消息总线。
-- **Codex 原生支持 HTTP。** 叫 Codex 干活？走插件或 MCP，不用绕 Telegram 转发。
+- **MCP 已经够用。** RecallNest 给了所有 agent 共享记忆，跨 agent 通信走 MCP/CLI 直接互通。
 - **A2A 只在群聊有意义。** 大部分用户都是跟 bot 一对一私聊，A2A 白加复杂度。
+- **私聊不需要中转。** Bot 之间通过终端层的 MCP 直接对话，不绕 Telegram。
 
 ## 配置
 
