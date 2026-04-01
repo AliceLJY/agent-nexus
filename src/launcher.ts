@@ -7,7 +7,13 @@ function readConfig() {
     console.log("  ❌ No config found. Run: agent-nexus init");
     process.exit(1);
   }
-  return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+  try {
+    return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+  } catch (e) {
+    console.log(`  ❌ Config file is malformed: ${CONFIG_PATH}`);
+    console.log(`     ${(e as Error).message}`);
+    process.exit(1);
+  }
 }
 
 function writePid(name: string, pid: number): void {

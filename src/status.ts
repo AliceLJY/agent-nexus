@@ -1,6 +1,6 @@
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, statSync } from "fs";
 import { join } from "path";
-import { PIDS_DIR } from "./paths.js";
+import { PIDS_DIR, LOGS_DIR } from "./paths.js";
 
 function isRunning(name: string): { running: boolean; pid: number | null } {
   const pidFile = join(PIDS_DIR, `${name}.pid`);
@@ -14,7 +14,7 @@ function isRunning(name: string): { running: boolean; pid: number | null } {
   }
 }
 
-async function fetchJson(url: string, timeoutMs = 3000): Promise<any> {
+async function fetchJson(url: string, timeoutMs = 3000): Promise<Record<string, any> | null> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -23,6 +23,34 @@ async function fetchJson(url: string, timeoutMs = 3000): Promise<any> {
     return await res.json();
   } catch {
     return null;
+  }
+}
+
+function checkBridgeLog(): { healthy: boolean; detail: string } {
+  const logPath = join(LOGS_DIR, "bridge.log");
+  if (!existsSync(logPath)) return { healthy: true, detail: "no log yet" };
+
+  try {
+    const stat = statSync(logPath);
+    const ageMs = Date.now() - stat.mtimeMs;
+    const ageSec = Math.floor(ageMs / 1000);
+
+    // Read last 2KB of log to check for errors
+    const content = readFileSync(logPath, "utf-8");
+    const tail = content.slice(-2048);
+    const lines = tail.split("\n").filter(Boolean);
+    const lastLine = lines[lines.length - 1] || "";
+
+    const hasError = /\b(FATAL|ECONNREFUSED|ETELEGRAM|401 Unauthorized|invalid.*token)/i.test(tail.slice(-1024));
+    if (hasError) {
+      return { healthy: false, detail: lastLine.slice(0, 80) };
+    }
+
+    if (ageSec < 60) return { healthy: true, detail: "active" };
+    const ageMin = Math.floor(ageSec / 60);
+    return { healthy: true, detail: `last activity ${ageMin}m ago` };
+  } catch {
+    return { healthy: true, detail: "log unreadable" };
   }
 }
 
@@ -40,7 +68,13 @@ export async function showStatus(): Promise<void> {
 
   const br = isRunning("bridge");
   if (br.running) {
-    console.log(`  TG Bridge:  ✅ running (PID ${br.pid})`);
+    const log = checkBridgeLog();
+    if (log.healthy) {
+      console.log(`  TG Bridge:  ✅ running (PID ${br.pid}, ${log.detail})`);
+    } else {
+      console.log(`  TG Bridge:  ⚠️  running but unhealthy (PID ${br.pid})`);
+      console.log(`              └─ ${log.detail}`);
+    }
   } else {
     console.log("  TG Bridge:  ⬚ stopped");
   }

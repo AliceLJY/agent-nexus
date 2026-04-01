@@ -16,7 +16,7 @@ interface GeminiConfig extends BackendConfig {
 
 interface NexusConfig {
   telegram: { ownerId: number; httpProxy: string };
-  memory: { jinaApiKey: string; dbPath: string };
+  memory: { jinaApiKey: string };
   agents: { claude: BackendConfig; codex: BackendConfig; gemini: GeminiConfig };
   crossAgent: { ccToCodex: "plugin" | "mcp" | "both" };
   groupChat: { enabled: boolean; sharedContextBackend: "sqlite" | "redis"; redisUrl: string };
@@ -110,7 +110,7 @@ export async function runWizard(): Promise<void> {
   // 6. Build config
   const config: NexusConfig = {
     telegram: { ownerId, httpProxy: httpProxy || "" },
-    memory: { jinaApiKey, dbPath: "~/.recallnest/data/lancedb" },
+    memory: { jinaApiKey },
     agents,
     crossAgent: { ccToCodex },
     groupChat,
@@ -120,7 +120,7 @@ export async function runWizard(): Promise<void> {
   mkdirSync(NEXUS_DIR, { recursive: true });
   mkdirSync(PIDS_DIR, { recursive: true });
   mkdirSync(LOGS_DIR, { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
+  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
   console.log(`\n  ✅ Config written to ${CONFIG_PATH}`);
 
   // 5. Inject MCP configs

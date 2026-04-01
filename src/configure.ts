@@ -14,7 +14,7 @@ interface GeminiConfig extends BackendConfig {
 
 interface NexusConfig {
   telegram: { ownerId: number; httpProxy: string };
-  memory: { jinaApiKey: string; dbPath: string };
+  memory: { jinaApiKey: string };
   agents: { claude: BackendConfig; codex: BackendConfig; gemini: GeminiConfig };
   crossAgent: { ccToCodex: "plugin" | "mcp" | "both" };
   groupChat: { enabled: boolean; sharedContextBackend: "sqlite" | "redis"; redisUrl: string };
@@ -54,7 +54,13 @@ function injectClaude(mcpEntry: string, jinaApiKey: string): void {
     writeFileSync(CLAUDE_JSON, JSON.stringify({ mcpServers: {} }, null, 2) + "\n");
   }
   backup(CLAUDE_JSON);
-  const config = JSON.parse(readFileSync(CLAUDE_JSON, "utf-8"));
+  let config: Record<string, any>;
+  try {
+    config = JSON.parse(readFileSync(CLAUDE_JSON, "utf-8"));
+  } catch {
+    console.log(`  ⚠️  ${CLAUDE_JSON} is malformed, recreating`);
+    config = { mcpServers: {} };
+  }
   if (!config.mcpServers) config.mcpServers = {};
   config.mcpServers.recallnest = {
     command: "bun",
@@ -81,8 +87,7 @@ function injectCodex(mcpEntry: string, jinaApiKey: string): void {
     return;
   }
 
-  const bunPath = process.execPath;
-  const tomlBlock = `\n[mcp_servers.recallnest]\ntype = "stdio"\ncommand = "${bunPath}"\nargs = ["run", "${mcpEntry}"]\n\n[mcp_servers.recallnest.env]\nJINA_API_KEY = "${jinaApiKey}"\n`;
+  const tomlBlock = `\n[mcp_servers.recallnest]\ntype = "stdio"\ncommand = "bun"\nargs = ["run", "${mcpEntry}"]\n\n[mcp_servers.recallnest.env]\nJINA_API_KEY = "${jinaApiKey}"\n`;
   writeFileSync(CODEX_TOML, content + tomlBlock);
   console.log("  ✅ Codex MCP configured");
 }
@@ -91,10 +96,15 @@ function injectGemini(mcpEntry: string, jinaApiKey: string): void {
   const dir = dirname(GEMINI_JSON);
   mkdirSync(dir, { recursive: true });
 
-  let config: any = {};
+  let config: Record<string, any> = {};
   if (existsSync(GEMINI_JSON)) {
     backup(GEMINI_JSON);
-    config = JSON.parse(readFileSync(GEMINI_JSON, "utf-8"));
+    try {
+      config = JSON.parse(readFileSync(GEMINI_JSON, "utf-8"));
+    } catch {
+      console.log(`  ⚠️  ${GEMINI_JSON} is malformed, recreating`);
+      config = {};
+    }
   }
 
   if (!config.mcpServers) config.mcpServers = {};
@@ -229,7 +239,7 @@ function generateBridgeConfig(config: NexusConfig): void {
     },
   };
   const bridgePath = join(NEXUS_DIR, "bridge-config.json");
-  writeFileSync(bridgePath, JSON.stringify(bridgeConfig, null, 2) + "\n");
+  writeFileSync(bridgePath, JSON.stringify(bridgeConfig, null, 2) + "\n", { mode: 0o600 });
   console.log(`  ✅ Bridge config written to ${bridgePath}`);
 }
 

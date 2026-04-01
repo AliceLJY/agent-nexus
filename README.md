@@ -215,7 +215,7 @@ All configuration lives in one place: `~/.agent-nexus/config.json`
 ```jsonc
 {
   "telegram": { "ownerId": 123456, "httpProxy": "" },
-  "memory": { "jinaApiKey": "...", "dbPath": "~/.recallnest/data/lancedb" },
+  "memory": { "jinaApiKey": "..." },
   "agents": {
     "claude": { "enabled": true, "botToken": "111:AAA..." },
     "codex": { "enabled": true, "botToken": "222:BBB..." },
