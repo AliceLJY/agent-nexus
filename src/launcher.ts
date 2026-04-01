@@ -69,24 +69,33 @@ export async function start(): Promise<void> {
     console.log(`  ✅ RecallNest started (PID ${proc.pid}, port 4318)`);
   }
 
-  // 2. Start telegram-ai-bridge
-  if (readPid("bridge")) {
-    console.log("  ⏭️  Telegram bridge already running");
-  } else {
-    const bridgeDir = findModule("telegram-ai-bridge");
-    const bridgeEntry = join(bridgeDir, "start.js");
-    const bridgeConfig = join(NEXUS_DIR, "bridge-config.json");
-    const logFile = Bun.file(join(LOGS_DIR, "bridge.log"));
+  // 2. Start telegram-ai-bridge (one process per enabled backend)
+  const bridgeDir = findModule("telegram-ai-bridge");
+  const bridgeEntry = join(bridgeDir, "start.js");
+  const bridgeConfig = join(NEXUS_DIR, "bridge-config.json");
+
+  const enabledBackends: string[] = [];
+  if (config.agents?.claude?.enabled) enabledBackends.push("claude");
+  if (config.agents?.codex?.enabled) enabledBackends.push("codex");
+  if (config.agents?.gemini?.enabled) enabledBackends.push("gemini");
+
+  for (const backend of enabledBackends) {
+    const pidName = `bridge-${backend}`;
+    if (readPid(pidName)) {
+      console.log(`  ⏭️  TG Bridge (${backend}) already running`);
+      continue;
+    }
+    const logFile = Bun.file(join(LOGS_DIR, `bridge-${backend}.log`));
     const writer = logFile.writer();
 
-    const proc = Bun.spawn(["bun", bridgeEntry, "start"], {
+    const proc = Bun.spawn(["bun", bridgeEntry, "start", "--backend", backend], {
       env: { ...process.env, BRIDGE_CONFIG_PATH: bridgeConfig },
       cwd: bridgeDir,
       stdout: writer,
       stderr: writer,
     });
-    writePid("bridge", proc.pid);
-    console.log(`  ✅ Telegram bridge started (PID ${proc.pid})`);
+    writePid(pidName, proc.pid);
+    console.log(`  ✅ TG Bridge (${backend}) started (PID ${proc.pid})`);
   }
 
   // 3. Health check after 2s
@@ -98,7 +107,19 @@ export async function start(): Promise<void> {
 export async function stop(): Promise<void> {
   console.log("\n🛑 Stopping agent-nexus services...\n");
 
-  for (const name of ["recallnest", "bridge"]) {
+  // Collect all services: recallnest + all bridge-* PIDs
+  const services = ["recallnest"];
+  for (const backend of ["claude", "codex", "gemini"]) {
+    if (existsSync(join(PIDS_DIR, `bridge-${backend}.pid`))) {
+      services.push(`bridge-${backend}`);
+    }
+  }
+  // Legacy single bridge PID (from older versions)
+  if (existsSync(join(PIDS_DIR, "bridge.pid"))) {
+    services.push("bridge");
+  }
+
+  for (const name of services) {
     const pid = readPid(name);
     if (pid) {
       try {

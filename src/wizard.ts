@@ -1,5 +1,5 @@
 import { createInterface } from "readline/promises";
-import { mkdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { detectEnvironment, printDetectResult } from "./detect.js";
 import { NEXUS_DIR, CONFIG_PATH, PIDS_DIR, LOGS_DIR } from "./paths.js";
 import { injectAllMcpConfigs } from "./configure.js";
@@ -34,9 +34,19 @@ export async function runWizard(): Promise<void> {
   const env = await detectEnvironment();
   printDetectResult(env);
 
-  // 2. Collect credentials
+  // 2. Check existing config
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
+  if (existsSync(CONFIG_PATH)) {
+    const overwrite = (await ask(rl, "Config already exists. Overwrite? [y/N]") || "n").toLowerCase();
+    if (overwrite !== "y" && overwrite !== "yes") {
+      console.log("  ⏭️  Keeping existing config. Done.");
+      rl.close();
+      return;
+    }
+  }
+
+  // 3. Collect credentials
   console.log("\n  📝 Credentials\n");
 
   const ownerIdStr = await ask(rl, "Your Telegram User ID");
@@ -48,7 +58,7 @@ export async function runWizard(): Promise<void> {
 
   const httpProxy = await ask(rl, "HTTPS Proxy (optional, Enter to skip)");
 
-  // 3. Per-backend bot tokens
+  // 4. Per-backend bot tokens
   console.log("\n  🤖 Bot Tokens (each backend needs its own @BotFather token)\n");
 
   const agents: NexusConfig["agents"] = {
@@ -70,7 +80,7 @@ export async function runWizard(): Promise<void> {
     }
   }
 
-  // 4. CC ↔ Codex communication
+  // 5. CC ↔ Codex communication
   let ccToCodex: NexusConfig["crossAgent"]["ccToCodex"] = "mcp";
   if (env.claude && env.codex) {
     console.log("\n  🔗 CC ↔ Codex Communication\n");
@@ -82,7 +92,7 @@ export async function runWizard(): Promise<void> {
     ccToCodex = choice === "1" ? "plugin" : choice === "2" ? "mcp" : "both";
   }
 
-  // 5. Group chat (multi-bot in same Telegram group)
+  // 6. Group chat (multi-bot in same Telegram group)
   const enabledCount = Object.values(agents).filter(a => a.enabled).length;
   let groupChat: NexusConfig["groupChat"] = { enabled: false, sharedContextBackend: "sqlite", redisUrl: "" };
   if (enabledCount >= 2) {
@@ -107,7 +117,7 @@ export async function runWizard(): Promise<void> {
   const anyEnabled = Object.values(agents).some(a => a.enabled);
   if (!anyEnabled) { console.log("  ❌ At least one backend needs a bot token."); process.exit(1); }
 
-  // 6. Build config
+  // 7. Build config
   const config: NexusConfig = {
     telegram: { ownerId, httpProxy: httpProxy || "" },
     memory: { jinaApiKey },
@@ -116,17 +126,17 @@ export async function runWizard(): Promise<void> {
     groupChat,
   };
 
-  // 4. Write dirs + config
+  // 8. Write dirs + config
   mkdirSync(NEXUS_DIR, { recursive: true });
   mkdirSync(PIDS_DIR, { recursive: true });
   mkdirSync(LOGS_DIR, { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
   console.log(`\n  ✅ Config written to ${CONFIG_PATH}`);
 
-  // 5. Inject MCP configs
+  // 9. Inject MCP configs
   injectAllMcpConfigs(config);
 
-  // 7. Cross-agent setup hints
+  // 10. Cross-agent setup hints
   if (ccToCodex === "plugin" || ccToCodex === "both") {
     console.log("  🔗 CC → Codex: Install the official plugin in Claude Code:");
     console.log("     claude /install-plugin codex@openai-codex\n");
@@ -140,7 +150,7 @@ export async function runWizard(): Promise<void> {
     console.log("     (no extra config needed)\n");
   }
 
-  // 8. Done
+  // 11. Done
   console.log(`  ✅ agent-nexus setup complete!
 
   Run: agent-nexus start

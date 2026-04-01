@@ -26,8 +26,8 @@ async function fetchJson(url: string, timeoutMs = 3000): Promise<Record<string, 
   }
 }
 
-function checkBridgeLog(): { healthy: boolean; detail: string } {
-  const logPath = join(LOGS_DIR, "bridge.log");
+function checkBridgeLog(backend: string): { healthy: boolean; detail: string } {
+  const logPath = join(LOGS_DIR, `bridge-${backend}.log`);
   if (!existsSync(logPath)) return { healthy: true, detail: "no log yet" };
 
   try {
@@ -66,17 +66,25 @@ export async function showStatus(): Promise<void> {
     console.log("  RecallNest: ⬚ stopped");
   }
 
-  const br = isRunning("bridge");
-  if (br.running) {
-    const log = checkBridgeLog();
-    if (log.healthy) {
-      console.log(`  TG Bridge:  ✅ running (PID ${br.pid}, ${log.detail})`);
+  let anyBridge = false;
+  for (const backend of ["claude", "codex", "gemini"]) {
+    const br = isRunning(`bridge-${backend}`);
+    if (!br.running && !existsSync(join(PIDS_DIR, `bridge-${backend}.pid`))) continue;
+    anyBridge = true;
+    if (br.running) {
+      const log = checkBridgeLog(backend);
+      if (log.healthy) {
+        console.log(`  TG ${backend}:  ✅ running (PID ${br.pid}, ${log.detail})`);
+      } else {
+        console.log(`  TG ${backend}:  ⚠️  running but unhealthy (PID ${br.pid})`);
+        console.log(`${" ".repeat(14)}└─ ${log.detail}`);
+      }
     } else {
-      console.log(`  TG Bridge:  ⚠️  running but unhealthy (PID ${br.pid})`);
-      console.log(`              └─ ${log.detail}`);
+      console.log(`  TG ${backend}:  ⬚ stopped`);
     }
-  } else {
-    console.log("  TG Bridge:  ⬚ stopped");
+  }
+  if (!anyBridge) {
+    console.log("  TG Bridge:  ⬚ no backends started");
   }
 
   console.log("");
