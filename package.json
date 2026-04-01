@@ -1,5 +1,5 @@
 {
-  "name": "agent-nexus",
+  "name": "@aliceljy/agent-nexus",
   "version": "0.1.0",
   "description": "One-click installer for RecallNest + telegram-ai-bridge. Shared memory + TG remote for CC/Codex/Gemini.",
   "license": "MIT",
@@ -8,8 +8,8 @@
     "agent-nexus": "bin/agent-nexus.ts"
   },
   "dependencies": {
-    "recallnest": "github:AliceLJY/recallnest",
-    "telegram-ai-bridge": "github:AliceLJY/telegram-ai-bridge"
+    "recallnest": "^1.4.1",
+    "telegram-ai-bridge": "^2.2.0"
   },
   "engines": {
     "bun": ">=1.3.0"

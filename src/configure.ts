@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
-import { CLAUDE_JSON, CODEX_TOML, GEMINI_JSON, NEXUS_DIR } from "./paths.js";
+import { CLAUDE_JSON, CLAUDE_MD, CODEX_TOML, CODEX_AGENTS_MD, GEMINI_JSON, GEMINI_MD, NEXUS_DIR } from "./paths.js";
 
 interface NexusConfig {
   telegram: { botToken: string; ownerId: number };
@@ -96,6 +96,81 @@ function injectGemini(mcpEntry: string, jinaApiKey: string): void {
   console.log("  ✅ Gemini CLI MCP configured");
 }
 
+function resolveSnippet(tool: "claude-code" | "codex" | "gemini-cli"): string | null {
+  const home = process.env.HOME || "";
+  const snippetName = tool === "codex" ? "agents-md-snippet.md" : tool === "claude-code" ? "claude-md-snippet.md" : "gemini-md-snippet.md";
+  const candidates = [
+    join(NEXUS_DIR, "node_modules", "recallnest", "integrations", tool, snippetName),
+    join(dirname(dirname(import.meta.dir)), "node_modules", "recallnest", "integrations", tool, snippetName),
+    join(process.cwd(), "node_modules", "recallnest", "integrations", tool, snippetName),
+    join(home, "recallnest", "integrations", tool, snippetName),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return null;
+}
+
+function injectManagedBlock(targetPath: string, snippetPath: string, markerName: string): void {
+  mkdirSync(dirname(targetPath), { recursive: true });
+
+  let existing = "";
+  if (existsSync(targetPath)) {
+    existing = readFileSync(targetPath, "utf-8");
+  }
+
+  const startMarker = `<!-- ${markerName}:start -->`;
+  const endMarker = `<!-- ${markerName}:end -->`;
+  const snippet = readFileSync(snippetPath, "utf-8");
+
+  // Remove old block if present
+  const blockRegex = new RegExp(
+    `${startMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?${endMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n?`,
+  );
+  const cleaned = existing.replace(blockRegex, "").trim();
+
+  // Prepend new block (RecallNest rules should come first)
+  const newContent = `${startMarker}\n${snippet}\n${endMarker}\n\n${cleaned}\n`;
+  writeFileSync(targetPath, newContent);
+}
+
+function injectContinuityRules(config: NexusConfig): void {
+  console.log("\n  📝 Injecting RecallNest continuity rules...\n");
+
+  if (config.agents.claude) {
+    const snippet = resolveSnippet("claude-code");
+    if (snippet) {
+      backup(CLAUDE_MD);
+      injectManagedBlock(CLAUDE_MD, snippet, "recallnest-continuity");
+      console.log("  ✅ Claude Code CLAUDE.md rules injected");
+    } else {
+      console.log("  ⚠️  Claude snippet not found — skipping CLAUDE.md");
+    }
+  }
+
+  if (config.agents.codex) {
+    const snippet = resolveSnippet("codex");
+    if (snippet) {
+      backup(CODEX_AGENTS_MD);
+      injectManagedBlock(CODEX_AGENTS_MD, snippet, "recallnest-continuity");
+      console.log("  ✅ Codex AGENTS.md rules injected");
+    } else {
+      console.log("  ⚠️  Codex snippet not found — skipping AGENTS.md");
+    }
+  }
+
+  if (config.agents.gemini) {
+    const snippet = resolveSnippet("gemini-cli");
+    if (snippet) {
+      backup(GEMINI_MD);
+      injectManagedBlock(GEMINI_MD, snippet, "recallnest-continuity");
+      console.log("  ✅ Gemini GEMINI.md rules injected");
+    } else {
+      console.log("  ⚠️  Gemini snippet not found — skipping GEMINI.md");
+    }
+  }
+}
+
 function generateBridgeConfig(config: NexusConfig): void {
   const bridgeConfig = {
     shared: {
@@ -140,4 +215,5 @@ export function injectAllMcpConfigs(config: NexusConfig): void {
   if (config.agents.codex) injectCodex(mcpEntry, config.memory.jinaApiKey);
   if (config.agents.gemini) injectGemini(mcpEntry, config.memory.jinaApiKey);
   generateBridgeConfig(config);
+  injectContinuityRules(config);
 }
