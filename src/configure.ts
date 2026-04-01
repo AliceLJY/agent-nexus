@@ -9,15 +9,21 @@ interface NexusConfig {
 }
 
 function resolveRecallnestMcp(): string {
+  const home = process.env.HOME || "";
   const candidates = [
+    // Global install (~/.agent-nexus/node_modules/)
     join(NEXUS_DIR, "node_modules", "recallnest", "src", "mcp-server.ts"),
+    // Local project node_modules (symlink or real)
     join(dirname(dirname(import.meta.dir)), "node_modules", "recallnest", "src", "mcp-server.ts"),
+    // CWD node_modules
+    join(process.cwd(), "node_modules", "recallnest", "src", "mcp-server.ts"),
+    // Common local dev paths
+    join(home, "Projects", "memory-lancedb-pro", "src", "mcp-server.ts"),
+    join(home, "recallnest", "src", "mcp-server.ts"),
   ];
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
-  const global = join(process.env.HOME || "", "node_modules", "recallnest", "src", "mcp-server.ts");
-  if (existsSync(global)) return global;
   throw new Error("Cannot find recallnest/src/mcp-server.ts. Run: bun install");
 }
 
