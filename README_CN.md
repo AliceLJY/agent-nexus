@@ -224,6 +224,8 @@ agent-nexus 是一个 AI Agent 工具生态的安装入口：
 | [telegram-ai-bridge](https://github.com/AliceLJY/telegram-ai-bridge) | Telegram 远程控制 + 多 agent 编排 | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/telegram-ai-bridge) |
 | [Claude Code Studio](https://github.com/AliceLJY/claude-code-studio) | Claude Code 多会话协作平台 | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/claude-code-studio) |
 
+> **想要完整工作流？** [cc-cabin](https://github.com/AliceLJY/cc-cabin) 是把这些模块串起来的脚手架——hooks、规则、工作流方法论，一应俱全。agent-nexus 60 秒搞定记忆 + 远控；cc-cabin 给你完整的 Claude Code 工作流。
+
 ## License
 
 MIT

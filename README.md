@@ -243,6 +243,8 @@ agent-nexus is the installer for a larger ecosystem of AI agent tools:
 | [telegram-ai-bridge](https://github.com/AliceLJY/telegram-ai-bridge) | Telegram remote control + multi-agent orchestration | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/telegram-ai-bridge) |
 | [Claude Code Studio](https://github.com/AliceLJY/claude-code-studio) | Multi-session collaboration platform for Claude Code | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/claude-code-studio) |
 
+> **Want the full workflow?** [cc-cabin](https://github.com/AliceLJY/cc-cabin) is the scaffold that ties these modules together — hooks, rules, workflow methodology, and more. agent-nexus gives you memory + remote in 60 seconds; cc-cabin gives you the complete Claude Code workflow.
+
 ## License
 
 MIT
