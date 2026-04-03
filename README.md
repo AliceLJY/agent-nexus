@@ -242,6 +242,11 @@ agent-nexus is the installer for a larger ecosystem of AI agent tools:
 | [RecallNest](https://github.com/AliceLJY/recallnest) | Shared memory layer (LanceDB + hybrid retrieval) | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/recallnest) |
 | [telegram-ai-bridge](https://github.com/AliceLJY/telegram-ai-bridge) | Telegram remote control + multi-agent orchestration | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/telegram-ai-bridge) |
 | [Claude Code Studio](https://github.com/AliceLJY/claude-code-studio) | Multi-session collaboration platform for Claude Code | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/claude-code-studio) |
+| [content-alchemy](https://github.com/AliceLJY/content-alchemy) | 5-stage AI writing pipeline | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/content-alchemy) |
+| [content-publisher](https://github.com/AliceLJY/content-publisher) | Image generation + layout + WeChat publishing | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/content-publisher) |
+| [openclaw-tunnel](https://github.com/AliceLJY/openclaw-tunnel) | Docker ↔ host CLI bridge (/cc /codex /gemini) | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/openclaw-tunnel) |
+| [digital-clone-skill](https://github.com/AliceLJY/digital-clone-skill) | Build digital clones from corpus data | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/digital-clone-skill) |
+| [telegram-cli-bridge](https://github.com/AliceLJY/telegram-cli-bridge) | Telegram CLI bridge for Gemini CLI | ![GitHub stars](https://img.shields.io/github/stars/AliceLJY/telegram-cli-bridge) |
 
 > **Want the full workflow?** [cc-cabin](https://github.com/AliceLJY/cc-cabin) is the scaffold that ties these modules together — hooks, rules, workflow methodology, and more. agent-nexus gives you memory + remote in 60 seconds; cc-cabin gives you the complete Claude Code workflow.
 
