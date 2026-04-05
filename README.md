@@ -191,12 +191,31 @@ Redis URL [redis://localhost:6379]:
 
 > Telegram bots can't see each other's messages natively. The shared context layer works around this by syncing messages through the backend store.
 
-### Why Not A2A?
+### War Room — Multi-CC Command Center
 
-The telegram-ai-bridge project includes an A2A bus for multi-bot auto-broadcast in Telegram group chats. agent-nexus supports A2A but **defaults to off**:
+Run 4 CC instances as separate Telegram bots, put them all in one group. Each bot stays silent until @mentioned — but reads everything via shared context. You orchestrate:
 
-- **Most users don't need it.** 1:1 private chats are the common case, and bots talk to each other directly via MCP/CLI.
-- **Group war rooms do.** Want multiple bots chiming in automatically in the same group? Set `a2aEnabled: true` in `bridge-config.json` to turn it on.
+```
+You:      @cc-alpha Analyze this API design
+Alpha:    [deep analysis, writes to shared context]
+
+You:      @cc-beta Write tests based on Alpha's analysis
+Beta:     [reads Alpha's context, writes tests]
+
+You:      @cc-gamma Review both — any gaps?
+Gamma:    [reads everything, reviews]
+```
+
+**4 agents, 1 group, shared memory, zero noise.** All bots share `~/.claude/` (CLAUDE.md, MCP memory, skills) automatically — no sync config needed.
+
+### Two Collaboration Modes
+
+| Mode | Behavior | Best for |
+|------|----------|----------|
+| **A2A** (CC + Codex group) | Bots auto-respond to each other with loop guards | Brainstorming, debate, second opinions |
+| **War Room** (multi-CC group) | @mention only, shared context via Redis | Coordinated parallel execution |
+
+A2A defaults to off. War Room works out of the box with shared context enabled.
 
 ## What Gets Installed
 
