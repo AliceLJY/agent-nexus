@@ -83,6 +83,7 @@ $ agent-nexus init
 |---|---|---|
 | **Memory** | Each agent starts from zero every session | All agents share persistent memory via RecallNest |
 | **Remote control** | Must be at your desk | Full control from Telegram on your phone |
+| **Parallel sessions** | One terminal = one agent | N Telegram bots = N parallel CC instances, shared memory |
 | **Setup time** | 30+ min (clone, configure, debug MCP paths...) | 60 seconds |
 | **Config files to edit** | 3-5 (per tool, per service) | 0 (auto-injected) |
 | **Processes to manage** | Start each service manually | `agent-nexus start` / `stop` |
@@ -107,23 +108,31 @@ agent-nexus status    # Health check with memory stats
 ## How It Works
 
 ```
-                    agent-nexus init
-                         |
-          +--------------+--------------+
-          |              |              |
-     ~/.claude.json  ~/.codex/     ~/.gemini/
-     (MCP injected)  config.toml   settings.json
-          |              |              |
-          v              v              v
-     Claude Code     Codex CLI    Gemini CLI
-          |              |              |
-          +------+-------+------+------+
-                 |              |
-            RecallNest    telegram-ai-bridge
-            (memory)      (remote control)
-                 |              |
-            LanceDB         Telegram
-          (your brain)    (your phone)
+                      agent-nexus init
+                           |
+            +--------------+--------------+
+            |              |              |
+       ~/.claude.json  ~/.codex/     ~/.gemini/
+       (MCP injected)  config.toml   settings.json
+            |              |              |
+            v              v              v
+       Claude Code     Codex CLI    Gemini CLI
+            |              |              |
+            +------+-------+------+------+
+                   |              |
+              RecallNest    telegram-ai-bridge
+              (memory)      (remote control)
+                   |              |
+              LanceDB      ┌─────┼─────┐
+            (your brain)   |     |     |
+                         Bot1  Bot2  Bot3  ...
+                           |     |     |
+                         CC #1 CC #2 CC #3    ← parallel instances
+                           \     |     /
+                         shared ~/.claude/     ← unified memory
+                               |
+                           Telegram
+                         (your phone)
 ```
 
 **agent-nexus doesn't replace anything.** It's the glue that makes your existing tools work as a team.
